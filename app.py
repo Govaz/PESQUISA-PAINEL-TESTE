@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import requests
 import numpy as np
 from fpdf import FPDF
 from io import BytesIO
@@ -8,23 +7,10 @@ from io import BytesIO
 st.set_page_config(page_title="Pesquisa de Preços - Painel Federal", layout="centered")
 st.title("🔎 Pesquisa de Preços - Compras Públicas")
 
-st.markdown("Digite o nome do item e clique em buscar para ver os valores disponíveis no Painel de Preços do Governo Federal.")
+st.markdown("Digite o nome do item e clique em buscar para ver os valores simulados de pregos públicos.")
 
 query = st.text_input("Item para pesquisa:", "Fio guia hidrofílico 0.032 mm x 150 cm")
 botao = st.button("Buscar Preços")
-
-@st.cache_data
-def buscar_dados(item):
-    url = "https://paineldeprecos.planejamento.gov.br/api/painel/buscar-item"
-    payload = {
-        "termo": item,
-        "pagina": 1,
-        "tamanho": 100
-    }
-    response = requests.post(url, json=payload)
-    if response.status_code == 200:
-        return response.json()
-    return []
 
 def gerar_pdf(df, media, mediana, sugestao):
     pdf = FPDF()
@@ -47,43 +33,33 @@ def gerar_pdf(df, media, mediana, sugestao):
     return buffer
 
 if botao:
-    st.info("Buscando dados, por favor aguarde...")
-    dados = buscar_dados(query)
+    st.info("Buscando dados simulados...")
 
-    if not dados or not dados.get("conteudo"):
-        st.error("Nenhum dado encontrado para o item pesquisado.")
-    else:
-        resultados = dados["conteudo"]
-        registros = []
-        for r in resultados:
-            if "PREGÃO" in r.get("modalidade", ""):
-                registros.append({
-                    "orgao": r.get("orgao"),
-                    "modalidade": r.get("modalidade"),
-                    "valor_unitario": float(r.get("valor_unitario", 0)),
-                    "data": r.get("data")
-                })
+    # Dados simulados de exemplo
+    registros = [
+        {"orgao": "Ministério da Saúde", "modalidade": "PREGÃO ELETRÔNICO", "valor_unitario": 123.45, "data": "2024-10-01"},
+        {"orgao": "Secretaria de Saúde MT", "modalidade": "PREGÃO ELETRÔNICO", "valor_unitario": 118.90, "data": "2024-09-15"},
+        {"orgao": "Hospital Regional", "modalidade": "PREGÃO PRESENCIAL", "valor_unitario": 130.00, "data": "2024-08-20"},
+        {"orgao": "Prefeitura de Cuiabá", "modalidade": "PREGÃO ELETRÔNICO", "valor_unitario": 119.75, "data": "2024-09-05"},
+        {"orgao": "SES-MT", "modalidade": "PREGÃO ELETRÔNICO", "valor_unitario": 125.60, "data": "2024-10-10"},
+    ]
 
-        df = pd.DataFrame(registros)
+    df = pd.DataFrame(registros)
+    media = df['valor_unitario'].mean()
+    mediana = df['valor_unitario'].median()
+    sugestao = mediana
 
-        if df.empty:
-            st.warning("Nenhum pregão encontrado para o item.")
-        else:
-            media = df['valor_unitario'].mean()
-            mediana = df['valor_unitario'].median()
-            sugestao = mediana
+    st.success("Dados simulados encontrados!")
+    st.dataframe(df)
 
-            st.success("Dados encontrados!")
-            st.dataframe(df)
+    st.markdown(f"**Média:** R$ {media:.2f}")
+    st.markdown(f"**Mediana:** R$ {mediana:.2f}")
+    st.markdown(f"**Sugestão de Preço de Referência:** R$ {sugestao:.2f}")
 
-            st.markdown(f"**Média:** R$ {media:.2f}")
-            st.markdown(f"**Mediana:** R$ {mediana:.2f}")
-            st.markdown(f"**Sugestão de Preço de Referência:** R$ {sugestao:.2f}")
-
-            pdf_buffer = gerar_pdf(df, media, mediana, sugestao)
-            st.download_button(
-                label="📄 Baixar Relatório em PDF",
-                data=pdf_buffer,
-                file_name="relatorio_pesquisa_precos.pdf",
-                mime="application/pdf"
-            )
+    pdf_buffer = gerar_pdf(df, media, mediana, sugestao)
+    st.download_button(
+        label="📄 Baixar Relatório em PDF",
+        data=pdf_buffer,
+        file_name="relatorio_pesquisa_precos.pdf",
+        mime="application/pdf"
+    )

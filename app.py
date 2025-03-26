@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from fpdf import FPDF
 from io import BytesIO
+import urllib.parse
 
 st.set_page_config(page_title="Pesquisa de Preços - Painel Federal", layout="centered")
 st.title("🔎 Pesquisa de Preços - Compras Públicas")
@@ -55,7 +56,9 @@ if botao:
     st.markdown(f"**Mediana:** R$ {mediana:.2f}")
     st.markdown(f"**Sugestão de Preço de Referência:** R$ {sugestao:.2f}")
 
-    st.markdown("[🔗 Ver Painel de Preços Federal](https://paineldeprecos.planejamento.gov.br)")
+    link_query = urllib.parse.quote(query)
+    painel_link = f"https://paineldeprecos.planejamento.gov.br/painel/busca?termo={link_query}"
+    st.markdown(f"[🔗 Ver esse termo no Painel de Preços Federal]({painel_link})")
 
     pdf_buffer = gerar_pdf(df, media, mediana, sugestao)
     st.download_button(

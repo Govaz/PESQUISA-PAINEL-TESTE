@@ -27,9 +27,8 @@ def gerar_pdf(df, media, mediana, sugestao):
         texto = f"{row['modalidade']} - {row['orgao']} - R$ {row['valor_unitario']} - {row['data']}"
         pdf.multi_cell(0, 10, texto)
         pdf.ln(1)
-    buffer = BytesIO()
-    pdf.output(buffer)
-    buffer.seek(0)
+    pdf_bytes = pdf.output(dest='S').encode('latin-1')
+    buffer = BytesIO(pdf_bytes)
     return buffer
 
 if botao:
@@ -55,6 +54,8 @@ if botao:
     st.markdown(f"**Média:** R$ {media:.2f}")
     st.markdown(f"**Mediana:** R$ {mediana:.2f}")
     st.markdown(f"**Sugestão de Preço de Referência:** R$ {sugestao:.2f}")
+
+    st.markdown("[🔗 Ver Painel de Preços Federal](https://paineldeprecos.planejamento.gov.br)")
 
     pdf_buffer = gerar_pdf(df, media, mediana, sugestao)
     st.download_button(

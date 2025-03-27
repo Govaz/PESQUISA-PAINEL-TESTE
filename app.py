@@ -22,9 +22,21 @@ def buscar_dados_painel(termo):
     driver.get(url)
     time.sleep(2)
 
-    campo_busca = driver.find_element(By.ID, "search-query")
+   from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+
+# Aguarda o campo aparecer até 15 segundos
+try:
+    campo_busca = WebDriverWait(driver, 15).until(
+        EC.presence_of_element_located((By.ID, "search-input"))
+    )
+    campo_busca.clear()
     campo_busca.send_keys(termo)
     campo_busca.submit()
+except Exception as e:
+    st.error("Não foi possível localizar o campo de busca. Verifique se o site está online.")
+    driver.quit()
+    return pd.DataFrame()
 
     time.sleep(6)  # Aguarda carregar os resultados
     dados = []

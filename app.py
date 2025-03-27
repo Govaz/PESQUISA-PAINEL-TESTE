@@ -1,17 +1,56 @@
 import streamlit as st
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+import time
 import pandas as pd
-import numpy as np
 from fpdf import FPDF
 from io import BytesIO
 import urllib.parse
 
-st.set_page_config(page_title="Pesquisa de Preços - Painel Federal", layout="centered")
-st.title("🔎 Pesquisa de Preços - Compras Públicas")
+def iniciar_navegador():
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    driver = webdriver.Chrome(options=chrome_options)
+    return driver
 
-st.markdown("Digite o nome do item e clique em buscar para ver os valores simulados de pregos públicos.")
+def buscar_dados_painel(termo):
+    driver = iniciar_navegador()
+    url = "https://paineldeprecos.planejamento.gov.br/"
+    driver.get(url)
+    time.sleep(2)
 
-query = st.text_input("Item para pesquisa:", "Fio guia hidrofílico 0.032 mm x 150 cm")
-botao = st.button("Buscar Preços")
+    campo_busca = driver.find_element(By.ID, "search-query")
+    campo_busca.send_keys(termo)
+    campo_busca.submit()
+
+    time.sleep(6)  # Aguarda carregar os resultados
+    dados = []
+
+    try:
+        linhas = driver.find_elements(By.CSS_SELECTOR, "tbody tr")
+        for linha in linhas:
+            colunas = linha.find_elements(By.TAG_NAME, "td")
+            if len(colunas) >= 5:
+                modalidade = colunas[0].text.strip()
+                orgao = colunas[1].text.strip()
+                valor = colunas[2].text.strip().replace("R$", "").replace(",", ".").strip()
+                data = colunas[4].text.strip()
+                if "PREGÃO" in modalidade.upper():
+                    dados.append({
+                        "modalidade": modalidade,
+                        "orgao": orgao,
+                        "valor_unitario": float(valor),
+                        "data": data
+                    })
+    except Exception as e:
+        st.error("Erro ao extrair dados: " + str(e))
+    finally:
+        driver.quit()
+
+    return pd.DataFrame(dados)
 
 def gerar_pdf(df, media, mediana, sugestao):
     pdf = FPDF()
@@ -19,51 +58,42 @@ def gerar_pdf(df, media, mediana, sugestao):
     pdf.set_font("Arial", size=12)
     pdf.cell(200, 10, txt="Relatório de Pesquisa de Preços", ln=True, align='C')
     pdf.ln(10)
-    pdf.cell(200, 10, txt=f"Média dos Preços: R$ {media:.2f}", ln=True)
-    pdf.cell(200, 10, txt=f"Mediana dos Preços: R$ {mediana:.2f}", ln=True)
-    pdf.cell(200, 10, txt=f"Sugestão de Preço de Referência: R$ {sugestao:.2f}", ln=True)
+    pdf.cell(200, 10, txt=f"Média: R$ {media:.2f}", ln=True)
+    pdf.cell(200, 10, txt=f"Mediana: R$ {mediana:.2f}", ln=True)
+    pdf.cell(200, 10, txt=f"Sugestão de Referência: R$ {sugestao:.2f}", ln=True)
     pdf.ln(10)
     pdf.set_font("Arial", size=10)
-    for i, row in df.iterrows():
+    for _, row in df.iterrows():
         texto = f"{row['modalidade']} - {row['orgao']} - R$ {row['valor_unitario']} - {row['data']}"
         pdf.multi_cell(0, 10, texto)
         pdf.ln(1)
     pdf_bytes = pdf.output(dest='S').encode('latin-1')
-    buffer = BytesIO(pdf_bytes)
-    return buffer
+    return BytesIO(pdf_bytes)
 
-if botao:
-    st.info("Buscando dados simulados...")
+st.set_page_config(page_title="Pesquisa Painel de Preços", layout="centered")
+st.title("🔎 Consulta Painel de Preços (Governo Federal)")
 
-    # Dados simulados de exemplo
-    registros = [
-        {"orgao": "Ministério da Saúde", "modalidade": "PREGÃO ELETRÔNICO", "valor_unitario": 123.45, "data": "2024-10-01"},
-        {"orgao": "Secretaria de Saúde MT", "modalidade": "PREGÃO ELETRÔNICO", "valor_unitario": 118.90, "data": "2024-09-15"},
-        {"orgao": "Hospital Regional", "modalidade": "PREGÃO PRESENCIAL", "valor_unitario": 130.00, "data": "2024-08-20"},
-        {"orgao": "Prefeitura de Cuiabá", "modalidade": "PREGÃO ELETRÔNICO", "valor_unitario": 119.75, "data": "2024-09-05"},
-        {"orgao": "SES-MT", "modalidade": "PREGÃO ELETRÔNICO", "valor_unitario": 125.60, "data": "2024-10-10"},
-    ]
+termo = st.text_input("Digite o item para pesquisa:", "fio guia hidrofílico 0.032 mm x 150 cm")
+buscar = st.button("Buscar Preços Reais")
 
-    df = pd.DataFrame(registros)
-    media = df['valor_unitario'].mean()
-    mediana = df['valor_unitario'].median()
-    sugestao = mediana
+if buscar:
+    st.info("Buscando dados reais... Aguarde!")
+    df = buscar_dados_painel(termo)
+    if df.empty:
+        st.warning("Nenhum dado encontrado.")
+    else:
+        media = df["valor_unitario"].mean()
+        mediana = df["valor_unitario"].median()
+        sugestao = mediana
 
-    st.success("Dados simulados encontrados!")
-    st.dataframe(df)
+        st.success("Resultados encontrados!")
+        st.dataframe(df)
+        st.markdown(f"**Média:** R$ {media:.2f}")
+        st.markdown(f"**Mediana:** R$ {mediana:.2f}")
+        st.markdown(f"**Sugestão de preço:** R$ {sugestao:.2f}")
 
-    st.markdown(f"**Média:** R$ {media:.2f}")
-    st.markdown(f"**Mediana:** R$ {mediana:.2f}")
-    st.markdown(f"**Sugestão de Preço de Referência:** R$ {sugestao:.2f}")
+        link = "https://paineldeprecos.planejamento.gov.br/painel/busca?termo=" + urllib.parse.quote(termo)
+        st.markdown(f"[🔗 Ver no Painel de Preços Federal]({link})")
 
-    link_query = urllib.parse.quote(query)
-    painel_link = f"https://paineldeprecos.planejamento.gov.br/painel/busca?termo={link_query}"
-    st.markdown(f"[🔗 Ver esse termo no Painel de Preços Federal]({painel_link})")
-
-    pdf_buffer = gerar_pdf(df, media, mediana, sugestao)
-    st.download_button(
-        label="📄 Baixar Relatório em PDF",
-        data=pdf_buffer,
-        file_name="relatorio_pesquisa_precos.pdf",
-        mime="application/pdf"
-    )
+        pdf_buffer = gerar_pdf(df, media, mediana, sugestao)
+        st.download_button("📄 Baixar PDF", data=pdf_buffer, file_name="relatorio.pdf", mime="application/pdf")
